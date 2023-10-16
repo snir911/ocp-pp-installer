@@ -1,0 +1,74 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: 'cm-defaulter'
+  namespace: openshift-sandboxed-containers-operator
+spec:
+  completions: 1
+  parallelism: 1
+  template:
+    spec:
+      hostNetwork: true # needed for imds access # TODO: comment out
+      securityContext:
+        runAsUser: 0 # needed for container mode dnf access
+
+      restartPolicy: Never
+      containers:
+      - command:
+        - 'bash'
+        - '-c'
+        - |
+          dnf install jq -y
+          CLOUD_PROVIDER=$(oc get infrastructure -n cluster -o json | jq '.items[].status.platformStatus.type'  | awk '{print tolower($0)}' | tr -d '"' )
+          echo "CLOUD_PROVIDER=${CLOUD_PROVIDER}" > /tmp/cm.env
+
+          if [ ${CLOUD_PROVIDER} == "aws" ]; then
+              export MAC=$(curl -m 30 -s --show-error http://169.254.169.254/latest/meta-data/mac)
+              [[ ! "${AWS_REGION}" ]] && export AWS_REGION=$(curl -m 30 -s --show-error http://169.254.169.254/latest/meta-data/placement/region)
+              [[ ! "${AWS_REGION}" ]] && echo "AWS_REGION is missing" && exit 1
+              [[ ! "${AWS_VPC_ID}" ]] && export AWS_VPC_ID=$(curl -m 30 -s --show-error http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}/vpc-id)
+              [[ ! "${AWS_VPC_ID}" ]] && echo "AWS_VPC_ID is missing" && exit 1
+              [[ ! "${AWS_SUBNET_ID}" ]] && export AWS_SUBNET_ID=$(curl -m 30 -s --show-error http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}/subnet-id)
+              [[ ! "${AWS_SUBNET_ID}" ]] && echo "AWS_SUBNET_ID is missing" && exit 1
+              # TODO: the following may return muliple values, validate format is as expected
+              [[ ! "${AWS_SG_IDS}" ]] && export AWS_SG_IDS=$(curl -m 30 -s --show-error http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}/security-group-ids)
+              [[ ! "${AWS_SG_IDS}" ]] && echo "AWS_SG_IDS is missing" && exit 1
+
+          cat <<EOF >> /tmp/cm.env
+              AWS_REGION=${AWS_REGION}
+              AWS_VPC_ID=${AWS_VPC_ID}
+              AWS_SUBNET_ID=${AWS_SUBNET_ID}
+              AWS_SG_IDS=${AWS_SG_IDS}
+              PODVM_INSTANCE_TYPE=t3.small
+              PROXY_TIMEOUT=5m
+              VXLAN_PORT=9000
+          EOF
+          elif [ "$CLOUD_PROVIDER" = "azure" ]; then
+
+              AZURE_NSG_ID=${AZURE_NSG_ID}
+              [[ ! "${AZURE_REGION}" ]] && AZURE_REGION=$(curl -H Metadata:true --noproxy "*" "http://169.254.169.254/metadata/instance/compute/location?api-version=2017-08-01&format=text")
+              [[ ! "${AZURE_RESOURCE_GROUP}" ]] && AZURE_RESOURCE_GROUP=$(curl -H Metadata:true --noproxy "*" "http://169.254.169.254/metadata/instance/compute/resourceGroupName?api-version=2017-08-01&format=text")
+              [[ ! "${AZURE_SUBSCRIPTION_ID}" ]] && AZURE_SUBSCRIPTION_ID=$(curl -H Metadata:true --noproxy "*" "http://169.254.169.254/metadata/instance/compute/subscriptionId?api-version=2017-08-01&format=text")
+              [[ ! "${AZURE_SUBNET_ID}" ]] && AZURE_SUBNET_ID="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.Network/virtualNetworks/${AZURE_RESOURCE_GROUP%-rg}-vnet/subnets/${AZURE_RESOURCE_GROUP%-rg}-worker-subnet"
+              [[ ! "${AZURE_NSG_ID}" ]] && AZURE_NSG_ID="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.Network/networkSecurityGroups/${AZURE_RESOURCE_GROUP%-rg}-nsg"
+
+          cat <<EOF >> /tmp/cm.env
+              AZURE_NSG_ID=${AZURE_NSG_ID}
+              AZURE_REGION=${AZURE_REGION}
+              AZURE_RESOURCE_GROUP=${AZURE_RESOURCE_GROUP}
+              AZURE_SUBNET_ID=${AZURE_SUBNET_ID}
+              AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}
+              AZURE_INSTANCE_SIZE=Standard_D8as_v5
+              DISABLECVM=true
+              PROXY_TIMEOUT=5m
+              VXLAN_PORT=9000
+          EOF
+          else
+            echo "Uknown provider: \"${CLOUD_PROVIDER}\""
+          fi
+
+           cat /tmp/cm.env
+           oc create cm peer-pods-cm --from-env-file=/tmp/cm.env
+
+        image: 'registry.redhat.io/openshift4/ose-cli'
+        name: 'cm-defaulter'

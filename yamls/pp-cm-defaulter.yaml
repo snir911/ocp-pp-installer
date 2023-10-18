@@ -4,6 +4,7 @@ metadata:
   name: 'cm-defaulter'
   namespace: openshift-sandboxed-containers-operator
 spec:
+  ttlSecondsAfterFinished: 100
   completions: 1
   parallelism: 1
   template:

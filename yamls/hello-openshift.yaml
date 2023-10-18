@@ -5,7 +5,7 @@ metadata:
   labels:
     app: hello-openshift
 spec:
-  runtimeClassName: kata-remote-cc
+  runtimeClassName: kata-remote
   containers:
     - name: hello-openshift
       image: quay.io/openshift/origin-hello-openshift

@@ -16,3 +16,14 @@ kube_apply() {
     envsubst < yamls/$filename | tee ${tmpdir}/$filename | oc apply -f-
 }
 
+add_auth() {
+    local toadd=$1
+    if [[ ! -f ${toadd} ]] || [[ $(jq < ${toadd} '[.auths ] | length') -eq 0 ]]; then
+        echo "Invalid auth.json file to combine"
+    fi
+    oc get -n openshift-config secret/pull-secret -o=jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq '.' > $tmpdir/orig-pull-secret.json
+    jq -s '.[0] * .[1] ' $tmpdir/orig-pull-secret.json ${toadd} > $tmpdir/combined.json
+    oc set data secret/pull-secret -n openshift-config --from-file=.dockerconfigjson=$tmpdir/combined.json
+    oc get -n openshift-config secret/pull-secret -o=jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq '.' || echo "Invalid pull-secret"
+}
+

@@ -7,6 +7,6 @@ spec:
   DisplayName: My Operator Catalog
   sourceType: grpc
   image: ${CATALOG_TAG}
-  updateStrategy:
-    registryPoll:
-      interval: 5m
+    #  updateStrategy:
+    #    registryPoll:
+    #      interval: 5m

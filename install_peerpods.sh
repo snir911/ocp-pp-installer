@@ -47,11 +47,13 @@ oc wait --for=condition=Available=true deployment.apps/controller-manager --time
 cld=$(oc get infrastructure -n cluster -o json | jq '.items[].status.platformStatus.type'  | awk '{print tolower($0)}' | tr -d '"' )
 echo "#### Cloud Provider is: $cld"
 
+#exit 0
 echo "#### Setting Secrets"
 case $cld in
    "aws")
         test_vars AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
-        kube_apply aws-secret.yaml;;
+        kube_apply aws-secret.yaml
+        aws_open_port;;
     "azure")
         test_vars AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_CLIENT_SECRET
         kube_apply azure-secret.yaml

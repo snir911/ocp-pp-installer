@@ -4,7 +4,7 @@ metadata:
   name: 'cm-defaulter'
   namespace: openshift-sandboxed-containers-operator
 spec:
-  ttlSecondsAfterFinished: 100
+  ttlSecondsAfterFinished: 1
   completions: 1
   parallelism: 1
   template:
@@ -19,6 +19,8 @@ spec:
         - 'bash'
         - '-c'
         - |
+          [[ -n $(oc get cm peer-pods-cm -n openshift-sandboxed-containers-operator 2>/dev/null) ]] && echo "ConfigMap already exist, skipping..." && exit 0
+
           dnf install jq -y
           CLOUD_PROVIDER=$(oc get infrastructure -n cluster -o json | jq '.items[].status.platformStatus.type'  | awk '{print tolower($0)}' | tr -d '"' )
           echo "CLOUD_PROVIDER=${CLOUD_PROVIDER}" > /tmp/cm.env
@@ -69,7 +71,7 @@ spec:
           fi
 
            cat /tmp/cm.env
-           oc create cm peer-pods-cm --from-env-file=/tmp/cm.env
+           oc create cm peer-pods-cm --from-env-file=/tmp/cm.env -n openshift-sandboxed-containers-operator
 
         image: 'registry.redhat.io/openshift4/ose-cli'
         name: 'cm-defaulter'

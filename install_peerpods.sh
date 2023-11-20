@@ -83,8 +83,13 @@ echo "press any key to create KataConfig" && read
 echo "#### Creating KataConfig..."
 kube_apply kataconfig.yaml
 
+until [ -n "$(oc get mcp -o=jsonpath='{.items[?(@.metadata.name=="kata-oc")].metadata.name}')" ]
+do
+    echo "#### Waiting for kata-oc to be created..."
+    oc get pods -n openshift-sandboxed-containers-operator
+    sleep 10
+done
 echo "#### Waiting for KataConfig to be created..."
-sleep 60
 oc wait --for=condition=Updating=false machineconfigpool/kata-oc --timeout=-1s
 
 oc rollout status daemonset peerpodconfig-ctrl-caa-daemon -n openshift-sandboxed-containers-operator --timeout=60s

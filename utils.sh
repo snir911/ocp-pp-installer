@@ -1,7 +1,6 @@
 #! /bin/bash
 
 tmpdir=$(mktemp -d)
-echo "Temp DIR: $tmpdir"
 
 test_vars() {
     for i in "$@"; do
@@ -38,4 +37,41 @@ aws_open_port() {
     local sg=$(aws ec2 describe-instances --instance-ids ${ids} --query 'Reservations[*].Instances[*].SecurityGroups[*].GroupId' --region ${region} | uniq)
     [[ -z $sg ]] && echo "(sg) faild to open AWS port, do it manually" && return 0
     aws ec2 authorize-security-group-ingress --group-id ${sg} --protocol tcp --port 15150 --source-group ${sg} --region ${region} || echo "failed to open ports, try manually" && return 0
+}
+
+helpmsg() {
+cat <<EOF
+Usage: $0 [options]
+   options:
+    -a <auth.json>    Provide auth json file with credentials to brew/ci
+    -d                Debug
+    -h                Print this help message
+    -t <repo base>    Set IMAGE_TAG_BASE
+    -r                Remove PeerPods
+    -y                Automatically answer yes for all questions
+    -v <a.b.c>        Porvide PeerPods version to install
+EOF
+rmdir $tmpdir
+}
+
+remove_peerpods() {
+    echo "#### Deleting Hello Openshift..."
+    oc delete all -l app=hello-openshift
+    echo "#### Deleting KataConfig..."
+    echo "Hack: run \"oc edit kataconfigs/example-kataconfig\" in another window and remove \"finalizers:\" and the line below."
+    oc delete kataconfigs/example-kataconfig
+
+    echo "#### Deleting Subscription..."
+    oc delete Subscription/sandboxed-containers-operator -n openshift-sandboxed-containers-operator
+
+    echo "#### Deleting OperatorGroup..."
+    oc delete OperatorGroup/openshift-sandboxed-containers-operator -n openshift-sandboxed-containers-operator
+
+    echo "#### Deleting Namespace..."
+    oc delete ns openshift-sandboxed-containers-operator
+
+    echo "#### Deleting CatalogSource..."
+    oc delete CatalogSource/my-operator-catalog -n openshift-marketplace
+
+    echo "!!! Delete cached bundle images in the Worker Nodes !!!"
 }

@@ -46,10 +46,11 @@ Usage: $0 [options]
     -a <auth.json>    Provide auth json file with credentials to brew/ci
     -d                Debug
     -h                Print this help message
-    -t <repo base>    Set IMAGE_TAG_BASE
     -r                Remove PeerPods
-    -y                Automatically answer yes for all questions
+    -s                Run sleep app
+    -t <repo base>    Set IMAGE_TAG_BASE
     -v <a.b.c>        Porvide PeerPods version to install
+    -y                Automatically answer yes for all questions
 EOF
 rmdir $tmpdir
 }
@@ -57,6 +58,7 @@ rmdir $tmpdir
 remove_peerpods() {
     echo "#### Deleting Hello Openshift..."
     oc delete all -l app=hello-openshift
+    oc delete pod/sleep
     echo "#### Deleting KataConfig..."
     echo "Hack: run \"oc edit kataconfigs/example-kataconfig\" in another window and remove \"finalizers:\" and the line below."
     oc delete kataconfigs/example-kataconfig

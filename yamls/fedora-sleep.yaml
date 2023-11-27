@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sleep
+spec:
+  runtimeClassName: kata-remote
+  containers:
+    - name: sleeping
+      image: fedora
+      command: ["sleep"]
+      args: ["infinity"]
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1001
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault

@@ -34,7 +34,7 @@ aws_open_port() {
     [[ -z $infra_name ]] && echo "(infra_name) faild to open AWS port, do it manually" && return 0
     local ids=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${infra_name}-worker*" --query 'Reservations[*].Instances[*].InstanceId' --output text --region ${region})
     [[ -z $ids ]] && echo "(ids) faild to open AWS port, do it manually" && return 0
-    local sg=$(aws ec2 describe-instances --instance-ids ${ids} --query 'Reservations[*].Instances[*].SecurityGroups[*].GroupId' --region ${region} | uniq)
+    local sg=$(aws ec2 describe-instances --instance-ids ${ids} --query 'Reservations[*].Instances[*].SecurityGroups[*].GroupId' --region ${region} --output text | uniq)
     [[ -z $sg ]] && echo "(sg) faild to open AWS port, do it manually" && return 0
     aws ec2 authorize-security-group-ingress --group-id ${sg} --protocol tcp --port 15150 --source-group ${sg} --region ${region} || echo "failed to open ports, try manually" && return 0
 }

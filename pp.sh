@@ -3,7 +3,7 @@ set -e
 
 source utils.sh
 
-while getopts "a:dht:ryv:" OPTION; do
+while getopts "a:dhrst:v:y" OPTION; do
     case $OPTION in
     a)
         AUTH_FILE=$OPTARG
@@ -15,18 +15,22 @@ while getopts "a:dht:ryv:" OPTION; do
         helpmsg
         exit 0
         ;;
+    r)
+        remove_peerpods && exit 0
+	;;
+    s)
+        kube_apply fedora-sleep.yaml
+        exit 0
+        ;;
     t)
         IMAGE_TAG_BASE=$OPTARG
 	;;
-    r)
-        remove_peerpods && exit 0
+    v)
+        VERSION=$OPTARG
 	;;
     y)
         YES=true
         ;;
-    v)
-        VERSION=$OPTARG
-	;;
     *)
         echo "Incorrect options provided"
         helpmsg
@@ -35,25 +39,30 @@ while getopts "a:dht:ryv:" OPTION; do
     esac
 done
 
-export VERSION=${VERSION:-1.5.0-36}
-export IMAGE_TAG_BASE=${IMAGE_TAG_BASE:=quay.io/openshift_sandboxed_containers/openshift-sandboxed-containers-operator}
-export CSV=sandboxed-containers-operator.v${VERSION%%-*}
-export CATALOG_TAG=${IMAGE_TAG_BASE}-catalog:v${VERSION}
-
 echo "Temp DIR: ${tmpdir}"
-echo "IMAGE_TAG_BASE=${IMAGE_TAG_BASE}"
+if [[ -n $VERSION ]]; then
+    export IMAGE_TAG_BASE=${IMAGE_TAG_BASE:=quay.io/openshift_sandboxed_containers/openshift-sandboxed-containers-operator}
+    export CATALOG_TAG=${IMAGE_TAG_BASE}-catalog:${VERSION}
+    export SOURCE=my-operator-catalog
+    echo "@@@ Using custum version @@@"
+    echo "@IMAGE_TAG_BASE=${IMAGE_TAG_BASE}"
+    echo "@CATALOG_TAG=${CATALOG_TAG}"
+fi
+export VERSION=${VERSION:-1.5.0}
+export CSV=sandboxed-containers-operator.v${VERSION%%-*}
+export SOURCE=${SOURCE:-redhat-operators}
+
 echo "VERSION=${VERSION}"
 echo "CSV=${CSV}"
-echo "CATALOG_TAG=${CATALOG_TAG}"
+echo "SOURCE=${SOURCE}"
 echo
 
 [[ -n $YES ]] || (read -r -p "Continue? [y/N]" && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
 
-echo "#### Creating ImageContentSourcePolicy..."
-kube_apply mirrors.yaml
-sleep 10
+[[ -n $CATALOG_TAG ]] && echo "#### Creating ImageContentSourcePolicy..." && \
+kube_apply mirrors.yaml && sleep 10
 
-echo "#### Creating CatalogSource..."
+[[ -n $CATALOG_TAG ]] && echo "#### Creating CatalogSource..." && \
 kube_apply catalog-source.yaml
 [[ -n $AUTH_FILE ]] && echo "#### Adding auth credentials..." && add_auth $AUTH_FILE
 
@@ -66,14 +75,15 @@ kube_apply operator-group.yaml
 echo "#### Creating Subscription..."
 kube_apply subscription.yaml
 
-sleep 60
-
-## Wait it is installed
-echo "#### Waiting for controller-manager..."
+until oc get daemonset deployment.apps/controller-manager -n openshift-sandboxed-containers-operator &> /dev/null
+do
+    echo "#### Waiting for controller-manager..."
+    sleep 5
+done
 oc wait --for=condition=Available=true deployment.apps/controller-manager --timeout=3m -n openshift-sandboxed-containers-operator
 
 # Fix wrong upstream variable
-echo "#### Fixing wrong env variable..."
+[[ -n $CATALOG_TAG ]] && echo "#### Fixing wrong env variable..." && \
 oc set env deployment.apps/controller-manager SANDBOXED_CONTAINERS_EXTENSION=sandboxed-containers -n openshift-sandboxed-containers-operator
 
 echo "#### Waiting for controller-manager..."
@@ -131,14 +141,19 @@ done
 echo "#### Waiting for KataConfig to be created..."
 oc wait --for=condition=Updating=false machineconfigpool/kata-oc --timeout=-1s
 
-sleep 20
+
+until oc get daemonset peerpodconfig-ctrl-caa-daemon -n openshift-sandboxed-containers-operator &> /dev/null
+do
+    echo "#### Waiting for peerpodconfig-ctrl-caa-daemon to be created..."
+    oc get pods -n openshift-sandboxed-containers-operator
+    sleep 10
+done
 oc rollout status daemonset peerpodconfig-ctrl-caa-daemon -n openshift-sandboxed-containers-operator --timeout=60s
 
 echo "Peer Pods has been installed on your cluster"
+oc get runtimeclass
 
 
-if (read -r -p "Deploy hello-openshift app? [y/N]" && [[ "$REPLY" =~ ^[Yy]$ ]]); then
-    echo "#### Creating Hello Openshift..."
-    kube_apply hello-openshift.yaml
-    oc expose service hello-openshift-service -l app=hello-openshift
-fi
+echo "#### Run \"$0 -s\" to run sample sleep pod ..."
+#kube_apply hello-openshift.yaml
+#oc expose service hello-openshift-service -l app=hello-openshift

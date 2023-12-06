@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "peer-pods-cm"
+  namespace: "openshift-sandboxed-containers-operator"
+data:
+  CLOUD_PROVIDER: "libvirt"
+  LIBVIRT_URI: ${LIBVIRT_URI} #"qemu+ssh://root@192.168.10.1/system?no_verify=1"
+  LIBVIRT_NET: ${LIBVIRT_NET}
+  LIBVIRT_POOL: ${LIBVIRT_POOL}
+  DISABLECVM: "true"
+  PROXY_TIMEOUT: "30m"
+  VXLAN_PORT: "9090"
+#LIBVIRT_VOL_NAME: "podvm-base.qcow2"
+#LIBVIRT_LAUNCH_SECURITY: ?
+#LIBVIRT_FIRMWARE: ?
+

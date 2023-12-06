@@ -2,6 +2,11 @@
 
 tmpdir=$(mktemp -d)
 
+RED='\033[0;31m'
+GREEN='\033[0;92m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
 test_vars() {
     for i in "$@"; do
         [ -z "${!i}" ] && echo "\$$i is NOT set" && EXT=1
@@ -46,6 +51,7 @@ Usage: $0 [options]
     -a <auth.json>    Provide auth json file with credentials to brew/ci
     -d                Debug
     -h                Print this help message
+    -l                Create ubuntu libvirt podvm image, in LIBVIRT_POOL pool or "default" pool
     -r                Remove PeerPods
     -s                Run sleep app
     -t <repo base>    Set IMAGE_TAG_BASE
@@ -53,6 +59,24 @@ Usage: $0 [options]
     -y                Automatically answer yes for all questions
 EOF
 rmdir $tmpdir
+}
+
+create_libvirt_ubuntu_image() {
+    local url=quay.io/confidential-containers/podvm-generic-ubuntu-amd64
+    local img_name=ubuntu.qcow2
+    local pool=${LIBVIRT_POOL:-default}
+    echo "image: ${tmpdir}/${img_name}, pool: ${pool}"
+    cd ${tmpdir}
+
+    curl https://github.com/confidential-containers/cloud-api-adaptor/blob/v0.8.0/podvm/hack/download-image.sh -o download-image.sh
+    chmod +x ./download-image.sh
+    ./download-image.sh ${url} ${tmpdir} -o ${img_name}
+
+    virsh -c qemu:///system vol-create-as --pool ${pool} --name podvm-base.qcow2 --capacity 20G --allocation 2G --prealloc-metadata --format qcow2
+    virsh -c qemu:///system vol-upload --vol podvm-base.qcow2 ${tmpdir}/${img_name} --pool ${pool} --sparse && \
+    echo "Volume named podvm-base.qcow2 in the ${pool} pool"
+    echo "    to delete volume run: \"virsh -c qemu:///system vol-delete podvm-base.qcow2 --pool ${pool}\""
+    [[ -f ${tmpdir}/${img_name} ]] && rm ${tmpdir}/${img_name} && rm ${tmpdir}/download-image.sh
 }
 
 remove_peerpods() {

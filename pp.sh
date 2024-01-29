@@ -86,11 +86,13 @@ oc wait --for=condition=Available=true deployment.apps/controller-manager --time
 echo "#### Setting Secrets"
 case $cld in
    "aws")
-        test_vars AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
-        kube_apply aws-secret.yaml;;
+        kube_apply aws-cred-request.yaml
+        while ! kubectl get secret peer-pods-secret -n openshift-sandboxed-containers-operator; do echo "Waiting for secret."; sleep 1; done
+        oc get secret peer-pods-secret -n openshift-sandboxed-containers-operator -o yaml | sed -E 's/aws_([a-z]|_)*:/\U&/g' | oc replace -f -;;
     "azure")
-        test_vars AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_CLIENT_SECRET
-        kube_apply azure-secret.yaml;;
+        kube_apply azure-cred-request.yaml
+        while ! kubectl get secret peer-pods-secret -n openshift-sandboxed-containers-operator; do echo "Waiting for secret."; sleep 1; done
+        oc get secret peer-pods-secret -n openshift-sandboxed-containers-operator -o yaml | sed -E 's/azure_([a-z]|_)*:/\U&/g' | oc replace -f -;;
     "libvirt"|"none")
          echo "creating dummy secret for libvirt"
 	 oc create secret generic peer-pods-secret -n openshift-sandboxed-containers-operator || true

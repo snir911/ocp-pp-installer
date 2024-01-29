@@ -34,8 +34,12 @@ done
 
 echo "Temp DIR: ${tmpdir}"
 if [[ -n $VERSION ]]; then
+    if [[ -z $IMAGE_TAG_BASE ]]; then
+        export CATALOG_TAG=${IMAGE_TAG_BASE}-catalog:${VERSION}
+    else
+        export CATALOG_TAG=${IMAGE_TAG_BASE}-catalog:v${VERSION}
+    fi
     export IMAGE_TAG_BASE=${IMAGE_TAG_BASE:=quay.io/openshift_sandboxed_containers/openshift-sandboxed-containers-operator}
-    export CATALOG_TAG=${IMAGE_TAG_BASE}-catalog:${VERSION}
     export SOURCE=my-operator-catalog
     echo -e "${RED}@@@ Using custum version @@@${NC}"
     echo -e "${RED}@${NC}IMAGE_TAG_BASE=${BLUE}${IMAGE_TAG_BASE}${NC}"
@@ -49,41 +53,41 @@ echo -e "VERSION=${GREEN}${VERSION}${NC}"
 echo -e  "CSV=${GREEN}${CSV}${NC}"
 echo -e "SOURCE=${GREEN}${SOURCE}${NC}"
 cld=$(oc get infrastructure -n cluster -o json | jq '.items[].status.platformStatus.type'  | awk '{print tolower($0)}' | tr -d '"' ) && cld=${cld//none/libvirt}
-echo -e "#### Cloud Provider is: ${RED}${cld}${NC} ####"
+echo -e "${BLUE}####${NC} Cloud Provider is: ${RED}${cld}${NC} ${BLUE}####${NC}"
 echo
 
 [[ -n $YES ]] || (read -r -p "Continue? [y/N]" && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
 
-[[ -n $CATALOG_TAG ]] && echo "#### Creating ImageContentSourcePolicy..." && \
+[[ -n $CATALOG_TAG ]] && echo -e "${BLUE}####${NC} Creating ImageContentSourcePolicy..." && \
 kube_apply mirrors.yaml && sleep 10
 
-[[ -n $CATALOG_TAG ]] && echo "#### Creating CatalogSource..." && \
+[[ -n $CATALOG_TAG ]] && echo -e "${BLUE}####${NC} Creating CatalogSource..." && \
 kube_apply catalog-source.yaml
-[[ -n $AUTH_FILE ]] && echo "#### Adding auth credentials..." && add_auth $AUTH_FILE
+[[ -n $AUTH_FILE ]] && echo -e "${BLUE}####${NC} Adding auth credentials..." && add_auth $AUTH_FILE
 
-echo "#### Creating Namespace..."
+echo -e "${BLUE}####${NC} Creating Namespace..."
 kube_apply namespace.yaml
 
-echo "#### Creating OperatorGroup..."
+echo -e "${BLUE}####${NC} Creating OperatorGroup..."
 kube_apply operator-group.yaml
 
-echo "#### Creating Subscription..."
+echo -e "${BLUE}####${NC} Creating Subscription..."
 kube_apply subscription.yaml
 
 until oc get deployment.apps/controller-manager -n openshift-sandboxed-containers-operator &> /dev/null; do
-    echo "#### Waiting for controller-manager..."
+    echo -e "${BLUE}####${NC} Waiting for controller-manager..."
     sleep 5
 done
 oc wait --for=condition=Available=true deployment.apps/controller-manager --timeout=3m -n openshift-sandboxed-containers-operator
 
 # Fix wrong upstream variable
-[[ -n $CATALOG_TAG ]] && echo "#### Fixing wrong env variable..." && \
+[[ -n $CATALOG_TAG ]] && echo -e "${BLUE}####${NC} Fixing wrong env variable..." && \
 oc set env deployment.apps/controller-manager SANDBOXED_CONTAINERS_EXTENSION=sandboxed-containers -n openshift-sandboxed-containers-operator
 
-echo "#### Waiting for controller-manager..."
+echo -e "${BLUE}####${NC} Waiting for controller-manager..."
 oc wait --for=condition=Available=true deployment.apps/controller-manager --timeout=20s -n openshift-sandboxed-containers-operator
 
-echo "#### Setting Secrets"
+echo -e "${BLUE}####${NC} Setting Secrets"
 case $cld in
    "aws")
         kube_apply aws-cred-request.yaml
@@ -102,7 +106,7 @@ case $cld in
 esac
 
 if [[ $cld == libvirt ]]; then
-    echo "#### libvirt provider, skipping CM setting"
+    echo -e "${BLUE}####${NC} libvirt provider, skipping CM setting"
     LIBVIRT_URI=${LIBVIRT_URI:-qemu+ssh://${USER}@192.168.122.1/system?no_verify=1}
     LIBVIRT_NET=${LIBVIRT_NET:-default}
     LIBVIRT_POOL=${LIBVIRT_POOL:-default}
@@ -110,7 +114,7 @@ if [[ $cld == libvirt ]]; then
     [[ -n $YES ]] || (read -r -p "Continue? [y/N]" && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
     kube_apply libvirt-cm.yaml
 elif [[ -n $YES ]] || (read -r -p "Create CM using the defaulter? [y/N]" && [[ "$REPLY" =~ ^[Yy]$ ]]) ; then
-    echo "#### Setting peer-pods-cm ConfigMap using defaulter"
+    echo -e "${BLUE}####${NC} Setting peer-pods-cm ConfigMap using defaulter"
     # check if cm already exist
     oc apply -f yamls/pp-cm-defaulter.yaml
     kubectl wait --for=condition=complete job/cm-defaulter -n openshift-sandboxed-containers-operator --timeout=60s
@@ -119,7 +123,7 @@ elif [[ -n $YES ]] || (read -r -p "Create CM using the defaulter? [y/N]" && [[ "
     fi
 fi
 
-echo "#### Misc configs"
+echo -e "${BLUE}####${NC} Misc configs"
 case $cld in
    "aws")
         aws_open_port;;
@@ -139,20 +143,20 @@ esac
 [[ -n $YES ]] || (read -r -p "Create KataConfig? [y/N]" && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
 
 # Create kataconfig
-echo "#### Creating KataConfig..."
+echo -e "${BLUE}####${NC} Creating KataConfig..."
 kube_apply kataconfig.yaml
 
 until [ -n "$(oc get mcp -o=jsonpath='{.items[?(@.metadata.name=="kata-oc")].metadata.name}')" ]; do
-    echo "#### Waiting for kata-oc to be created..."
+    echo -e "${BLUE}####${NC} Waiting for kata-oc to be created..."
     oc get pods -n openshift-sandboxed-containers-operator
     sleep 10
 done
-echo "#### Waiting for KataConfig to be created..."
+echo -e "${BLUE}####${NC} Waiting for KataConfig to be created..."
 oc wait --for=condition=Updating=false machineconfigpool/kata-oc --timeout=-1s
 
 
 until oc get daemonset peerpodconfig-ctrl-caa-daemon -n openshift-sandboxed-containers-operator &> /dev/null; do
-    echo "#### Waiting for peerpodconfig-ctrl-caa-daemon to be created..."
+    echo -e "${BLUE}####${NC} Waiting for peerpodconfig-ctrl-caa-daemon to be created..."
     oc get pods -n openshift-sandboxed-containers-operator
     sleep 10
 done
@@ -162,6 +166,6 @@ echo "Peer Pods has been installed on your cluster"
 oc get runtimeclass
 
 
-echo "#### Run \"$0 -s\" to run sample sleep pod ..."
+echo -e "#### Run ${BLUE}\"$0 -s\"${NC} to run sample sleep pod ..."
 #kube_apply hello-openshift.yaml
 #oc expose service hello-openshift-service -l app=hello-openshift

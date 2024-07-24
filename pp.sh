@@ -3,10 +3,17 @@ set -e
 
 source utils.sh
 
-while getopts "a:dhlrst:v:y" OPTION; do
+DEFAULT_CATALOG="quay.io/openshift_sandboxed_containers/openshift-sandboxed-containers-operator-catalog:0.0.1-14"
+[[ -f ${XDG_RUNTIME_DIR}/containers/auth.json ]] && AUTH_FILE=${XDG_RUNTIME_DIR}/containers/auth.json
+
+while getopts "a:Ac:Cdhlrsv:y" OPTION; do
     case $OPTION in
     a)
         AUTH_FILE=$OPTARG;;
+    c)
+        export CATALOG=${OPTARG};;
+    C)
+        export CATALOG=${DEFAULT_CATALOG};;
     d)
         set -x;;
     h)
@@ -20,8 +27,6 @@ while getopts "a:dhlrst:v:y" OPTION; do
     s)
         kube_apply fedora-sleep.yaml
         exit 0;;
-    t)
-        IMAGE_TAG_BASE=$OPTARG;;
     v)
         VERSION=$OPTARG;;
     y)
@@ -33,19 +38,13 @@ while getopts "a:dhlrst:v:y" OPTION; do
 done
 
 echo "Temp DIR: ${tmpdir}"
-if [[ -n $VERSION ]]; then
-    if [[ -z $IMAGE_TAG_BASE ]]; then
-        export CATALOG_TAG=${IMAGE_TAG_BASE}-catalog:${VERSION}
-    else
-        export CATALOG_TAG=${IMAGE_TAG_BASE}-catalog:v${VERSION}
-    fi
-    export IMAGE_TAG_BASE=${IMAGE_TAG_BASE:=quay.io/openshift_sandboxed_containers/openshift-sandboxed-containers-operator}
+if [[ -n $CATALOG ]]; then
     export SOURCE=my-operator-catalog
     echo -e "${RED}@@@ Using custum version @@@${NC}"
-    echo -e "${RED}@${NC}IMAGE_TAG_BASE=${BLUE}${IMAGE_TAG_BASE}${NC}"
-    echo -e "${RED}@${NC}CATALOG_TAG=${BLUE}${CATALOG_TAG}${NC}"
+    echo -e "${RED}@${NC}CATALOG=${BLUE}${CATALOG}${NC}"
+    echo -e "${RED}@${NC}AUTH_FILE=${BLUE}${AUTH_FILE}${NC}"
 fi
-export VERSION=${VERSION:-1.5.0}
+export VERSION=${VERSION:-1.6.0}
 export CSV=sandboxed-containers-operator.v${VERSION%%-*}
 export SOURCE=${SOURCE:-redhat-operators}
 
@@ -56,12 +55,12 @@ cld=$(oc get infrastructure -n cluster -o json | jq '.items[].status.platformSta
 echo -e "${BLUE}####${NC} Cloud Provider is: ${RED}${cld}${NC} ${BLUE}####${NC}"
 echo
 
-[[ -n $YES ]] || (read -r -p "Continue? [y/N]" && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
+[[ -n $YES ]] || (read -r -p "Continue? [y/N] " && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
 
-[[ -n $CATALOG_TAG ]] && echo -e "${BLUE}####${NC} Creating ImageContentSourcePolicy..." && \
+[[ -n $CATALOG ]] && echo -e "${BLUE}####${NC} Creating ImageContentSourcePolicy..." && \
 kube_apply mirrors.yaml && sleep 10
 
-[[ -n $CATALOG_TAG ]] && echo -e "${BLUE}####${NC} Creating CatalogSource..." && \
+[[ -n $CATALOG ]] && echo -e "${BLUE}####${NC} Creating CatalogSource..." && \
 kube_apply catalog-source.yaml
 [[ -n $AUTH_FILE ]] && echo -e "${BLUE}####${NC} Adding auth credentials..." && add_auth $AUTH_FILE
 
@@ -81,29 +80,31 @@ done
 oc wait --for=condition=Available=true deployment.apps/controller-manager --timeout=3m -n openshift-sandboxed-containers-operator
 
 # Fix wrong upstream variable
-[[ -n $CATALOG_TAG ]] && echo -e "${BLUE}####${NC} Fixing wrong env variable..." && \
+[[ -n $CATALOG ]] && echo -e "${BLUE}####${NC} Fixing wrong env variable..." && \
 oc set env deployment.apps/controller-manager SANDBOXED_CONTAINERS_EXTENSION=sandboxed-containers -n openshift-sandboxed-containers-operator
 
 echo -e "${BLUE}####${NC} Waiting for controller-manager..."
 oc wait --for=condition=Available=true deployment.apps/controller-manager --timeout=20s -n openshift-sandboxed-containers-operator
 
 echo -e "${BLUE}####${NC} Setting Secrets"
-case $cld in
-   "aws")
-        kube_apply aws-cred-request.yaml
-        while ! kubectl get secret peer-pods-secret -n openshift-sandboxed-containers-operator; do echo "Waiting for secret."; sleep 1; done
-        oc get secret peer-pods-secret -n openshift-sandboxed-containers-operator -o yaml | sed -E 's/aws_([a-z]|_)*:/\U&/g' | oc replace -f -;;
-    "azure")
-        kube_apply azure-cred-request.yaml
-        while ! kubectl get secret peer-pods-secret -n openshift-sandboxed-containers-operator; do echo "Waiting for secret."; sleep 1; done
-        oc get secret peer-pods-secret -n openshift-sandboxed-containers-operator -o yaml | sed -E 's/azure_([a-z]|_)*:/\U&/g' | oc replace -f -;;
-    "libvirt"|"none")
-         echo "creating dummy secret for libvirt"
-	 oc create secret generic peer-pods-secret -n openshift-sandboxed-containers-operator || true
-	 ;;
-    *)
+if [[ -n $YES ]] || (read -r -p "Create Secrets? [y/N] " && [[ "$REPLY" =~ ^[Yy]$ ]]) ; then
+    case $cld in
+        "aws")
+            kube_apply aws-cred-request.yaml
+            while ! kubectl get secret peer-pods-secret -n openshift-sandboxed-containers-operator; do echo "Waiting for secret."; sleep 1; done
+            oc get secret peer-pods-secret -n openshift-sandboxed-containers-operator -o yaml | sed -E 's/aws_([a-z]|_)*:/\U&/g' | oc replace -f -;;
+        "azure")
+            kube_apply azure-cred-request.yaml
+            while ! kubectl get secret peer-pods-secret -n openshift-sandboxed-containers-operator; do echo "Waiting for secret."; sleep 1; done
+            oc get secret peer-pods-secret -n openshift-sandboxed-containers-operator -o yaml | sed -E 's/azure_([a-z]|_)*:/\U&/g' | oc replace -f -;;
+        "libvirt"|"none")
+            echo "creating dummy secret for libvirt"
+	    oc create secret generic peer-pods-secret -n openshift-sandboxed-containers-operator || true
+            ;;
+        *)
         echo "Supported options are aws, azure and libvirt" && exit 1;;
-esac
+    esac
+fi
 
 if [[ $cld == libvirt ]]; then
     echo -e "${BLUE}####${NC} libvirt provider, skipping CM setting"
@@ -111,9 +112,9 @@ if [[ $cld == libvirt ]]; then
     LIBVIRT_NET=${LIBVIRT_NET:-default}
     LIBVIRT_POOL=${LIBVIRT_POOL:-default}
     echo "LIBVIRT_URI=${LIBVIRT_URI}, LIBVIRT_NET=${LIBVIRT_NET}, LIBVIRT_POOL=${LIBVIRT_POOL}"
-    [[ -n $YES ]] || (read -r -p "Continue? [y/N]" && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
+    [[ -n $YES ]] || (read -r -p "Continue? [y/N] " && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
     kube_apply libvirt-cm.yaml
-elif [[ -n $YES ]] || (read -r -p "Create CM using the defaulter? [y/N]" && [[ "$REPLY" =~ ^[Yy]$ ]]) ; then
+elif [[ -n $YES ]] || (read -r -p "Create CM using the defaulter? [y/N] " && [[ "$REPLY" =~ ^[Yy]$ ]]) ; then
     echo -e "${BLUE}####${NC} Setting peer-pods-cm ConfigMap using defaulter"
     # check if cm already exist
     oc apply -f yamls/pp-cm-defaulter.yaml
@@ -132,7 +133,7 @@ case $cld in
 	oc create secret generic ssh-key-secret -n openshift-sandboxed-containers-operator --from-file=id_rsa.pub=$tmpdir/id_rsa.pub --from-file=id_rsa=$tmpdir/id_rsa || true;;
     "libvirt")
         oc get secret ssh-key-secret -n openshift-sandboxed-containers-operator 2> /dev/null || true
-        if [[ -n $YES ]] || (read -r -p "Creating key for libvirt and add to ~/.ssh/authorized_keys? [y/N]" && [[ "$REPLY" =~ ^[Yy]$ ]]) ; then
+        if [[ -n $YES ]] || (read -r -p "Creating key for libvirt and add to ~/.ssh/authorized_keys? [y/N] " && [[ "$REPLY" =~ ^[Yy]$ ]]) ; then
             ssh-keygen -f ${tmpdir}/id_rsa -N ""
             oc create secret generic ssh-key-secret -n openshift-sandboxed-containers-operator --from-file=id_rsa.pub=$tmpdir/id_rsa.pub --from-file=id_rsa=$tmpdir/id_rsa && \
             cat ${tmpdir}/id_rsa.pub >> ~/.ssh/authorized_keys
@@ -140,7 +141,7 @@ case $cld in
 	;;
 esac
 
-[[ -n $YES ]] || (read -r -p "Create KataConfig? [y/N]" && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
+[[ -n $YES ]] || (read -r -p "Create KataConfig? [y/N] " && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
 
 # Create kataconfig
 echo -e "${BLUE}####${NC} Creating KataConfig..."

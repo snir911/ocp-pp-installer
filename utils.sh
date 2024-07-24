@@ -25,8 +25,10 @@ add_auth() {
     if [[ ! -f ${toadd} ]] || [[ $(jq < ${toadd} '[.auths ] | length') -eq 0 ]]; then
         echo "Invalid auth.json file to combine"
     fi
+    echo "cleaning registries that may break Openshift's pulls"
+    jq 'del(.auths."quay.io") | del(.auths."registry.redhat.io")' ${toadd} > $tmpdir/cleanedauth.json
     oc get -n openshift-config secret/pull-secret -o=jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq '.' > $tmpdir/orig-pull-secret.json
-    jq -s '.[0] * .[1] ' $tmpdir/orig-pull-secret.json ${toadd} > $tmpdir/combined.json
+    jq -s '.[0] * .[1] ' $tmpdir/orig-pull-secret.json $tmpdir/cleanedauth.json > $tmpdir/combined.json
     oc set data secret/pull-secret -n openshift-config --from-file=.dockerconfigjson=$tmpdir/combined.json
     oc get -n openshift-config secret/pull-secret -o=jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq '.' || echo "Invalid pull-secret"
 }
@@ -39,9 +41,11 @@ aws_open_port() {
     [[ -z $infra_name ]] && echo "(infra_name) faild to open AWS port, do it manually" && return 0
     local ids=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${infra_name}-worker*" --query 'Reservations[*].Instances[*].InstanceId' --output text --region ${region})
     [[ -z $ids ]] && echo "(ids) faild to open AWS port, do it manually" && return 0
-    local sg=$(aws ec2 describe-instances --instance-ids ${ids} --query 'Reservations[*].Instances[*].SecurityGroups[*].GroupId' --region ${region} --output text | uniq)
-    [[ -z $sg ]] && echo "(sg) faild to open AWS port, do it manually" && return 0
-    aws ec2 authorize-security-group-ingress --group-id ${sg} --protocol tcp --port 15150 --source-group ${sg} --region ${region} || echo "failed to open ports, try manually" && return 0
+    local sgs=($(aws ec2 describe-instances --instance-ids ${ids} --query 'Reservations[*].Instances[*].SecurityGroups[*].GroupId' --output text --region ${region}))
+    [[ -z ${sgs[0]} ]] && echo "(sgs) faild to open AWS port, do it manually" && return 0
+    for sg in "${sgs[@]}"; do
+        aws ec2 authorize-security-group-ingress --group-id ${sg} --protocol tcp --port 15150 --source-group ${sg} --region ${region} || echo "failed to open ports, try manually" #&& return 0
+    done
 }
 
 helpmsg() {
@@ -49,13 +53,14 @@ cat <<EOF
 Usage: $0 [options]
    options:
     -a <auth.json>    Provide auth json file with credentials to brew/ci
+    -c <catalog:tag>  Set custom CATALOG
+    -C                CATALOG is set to default value
     -d                Debug
     -h                Print this help message
     -l                Create ubuntu libvirt podvm image, in LIBVIRT_POOL pool or "default" pool
     -r                Remove PeerPods
     -s                Run sleep app
-    -t <repo base>    Set IMAGE_TAG_BASE
-    -v <a.b.c>        Porvide PeerPods version to install
+    -v <a.b.c>        Porvide PeerPods version to install (used for CSV)
     -y                Automatically answer yes for all questions
 EOF
 rmdir $tmpdir

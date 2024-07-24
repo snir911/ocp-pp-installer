@@ -6,7 +6,7 @@ metadata:
 spec:
   DisplayName: My Operator Catalog
   sourceType: grpc
-  image: ${CATALOG_TAG}
+  image: ${CATALOG}
     #  updateStrategy:
     #    registryPoll:
     #      interval: 5m

@@ -4,7 +4,7 @@ metadata:
   name: 'cm-defaulter'
   namespace: openshift-sandboxed-containers-operator
 spec:
-  ttlSecondsAfterFinished: 1
+  ttlSecondsAfterFinished: 30
   completions: 1
   parallelism: 1
   template:
@@ -34,7 +34,7 @@ spec:
               [[ ! "${AWS_SUBNET_ID}" ]] && export AWS_SUBNET_ID=$(curl -m 30 -s --show-error http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}/subnet-id)
               [[ ! "${AWS_SUBNET_ID}" ]] && echo "AWS_SUBNET_ID is missing" && exit 1
               # TODO: the following may return muliple values, validate format is as expected
-              [[ ! "${AWS_SG_IDS}" ]] && export AWS_SG_IDS=$(curl -m 30 -s --show-error http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}/security-group-ids)
+              [[ ! "${AWS_SG_IDS}" ]] && SGS=($(curl -m 30 -s --show-error http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}/security-group-ids)) && IFS=, && export AWS_SG_IDS="${SGS[*]}" && unset IFS
               [[ ! "${AWS_SG_IDS}" ]] && echo "AWS_SG_IDS is missing" && exit 1
 
           cat <<EOF >> /tmp/cm.env
@@ -44,6 +44,7 @@ spec:
               AWS_SG_IDS=${AWS_SG_IDS}
               PODVM_INSTANCE_TYPE=t3.small
               PROXY_TIMEOUT=5m
+              DISABLECVM=true
               VXLAN_PORT=9000
           EOF
           elif [ "$CLOUD_PROVIDER" = "azure" ]; then

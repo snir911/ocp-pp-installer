@@ -11,4 +11,6 @@ spec:
     apiVersion: cloudcredential.openshift.io/v1
     kind: AzureProviderSpec
     roleBindings: # limit
-      - role: Contributor
+      - role: Reader
+      - role: Virtual Machine Contributor
+      - role: Network Contributor

@@ -48,6 +48,35 @@ aws_open_port() {
     done
 }
 
+azure_attach_nat() {
+    local peerpod_nat_gw=peerpod-nat-gw
+    local peerpod_nat_gw_ip=peerpod-nat-gw-ip
+
+    [[ -z ${AZURE_REGION} ]] && echo "getting region from cm" && \
+      local AZURE_REGION=$(oc get configmap peer-pods-cm -n openshift-sandboxed-containers-operator -o jsonpath='{.data.AZURE_REGION}') && \
+      [[ -z ${AZURE_REGION} ]] && echo "FAILED!!! to attach Azure nat, failed to get region" && return
+
+    # Get the vnet configured
+    local azure_rg=$(oc get infrastructure/cluster -o jsonpath='{.status.platformStatus.azure.resourceGroupName}') && \
+      echo "Azure RG: \"$azure_rg\"" || echo "FAILED!!! to attach Azure nat, failed to fetch Azure RG"
+
+    local azure_vnet_name=$(az network vnet list -g "${azure_rg}" --query '[].name' -o tsv) && \
+      echo "Azure vnet name: \"$azure_vnet_name\"" || echo "FAILED!!! to Attach azure nat, failed to get vnet"
+
+    azure_subnet_id=$(az network vnet subnet list --resource-group "${azure_rg}" \
+       --vnet-name "${azure_vnet_name}" --query "[].{Id:id} | [? contains(Id, 'worker')]" --output tsv) && \
+       echo "Azure subnet-id: \"$azure_subnet_id\"" || echo "FAILED!!! to attach Azure nat, failed subnet-id"
+
+    az network public-ip create -g "${azure_rg}" -n "${peerpod_nat_gw_ip}" -l "${AZURE_REGION}" \
+      --sku Standard || echo "FAILED!!! to attach azure nat, failed to set public-id"
+    az network nat gateway create -g "${azure_rg}" -l "${AZURE_REGION}" \
+      --public-ip-addresses "${peerpod_nat_gw_ip}" -n "${peerpod_nat_gw}" || \
+      echo "FAILED!!! to attach azure nat, failed to set nat getway"
+
+    az network vnet subnet update --nat-gateway "${peerpod_nat_gw}" --ids "${azure_subnet_id}" || \
+      echo "FAILED!!! to attach azure nat, failed to update vnet"
+}
+
 helpmsg() {
 cat <<EOF
 Usage: $0 [options]

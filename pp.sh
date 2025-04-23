@@ -126,6 +126,8 @@ case $cld in
    "aws")
         aws_open_port;;
     "azure")
+        export AZURE_REGION
+	azure_attach_nat
 	ssh-keygen -f ${tmpdir}/id_rsa -N ""
 	oc create secret generic ssh-key-secret -n openshift-sandboxed-containers-operator --from-file=id_rsa.pub=$tmpdir/id_rsa.pub --from-file=id_rsa=$tmpdir/id_rsa || true;;
     "libvirt")

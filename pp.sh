@@ -153,12 +153,12 @@ echo -e "${BLUE}####${NC} Waiting for KataConfig to be created..."
 oc wait --for=condition=Updating=false machineconfigpool/kata-oc --timeout=-1s
 
 
-until oc get daemonset peerpodconfig-ctrl-caa-daemon -n openshift-sandboxed-containers-operator &> /dev/null; do
-    echo -e "${BLUE}####${NC} Waiting for peerpodconfig-ctrl-caa-daemon to be created..."
+until oc get daemonset osc-caa-ds -n openshift-sandboxed-containers-operator &> /dev/null; do
+    echo -e "${BLUE}####${NC} Waiting for osc-caa-ds to be created..."
     oc get pods -n openshift-sandboxed-containers-operator
     sleep 10
 done
-oc rollout status daemonset peerpodconfig-ctrl-caa-daemon -n openshift-sandboxed-containers-operator --timeout=60s
+oc rollout status daemonset osc-caa-ds -n openshift-sandboxed-containers-operator --timeout=60s
 
 echo "Peer Pods has been installed on your cluster"
 oc get runtimeclass

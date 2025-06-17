@@ -58,7 +58,8 @@ echo
 [[ -n $YES ]] || (read -r -p "Continue? [y/N] " && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
 
 [[ -n $CATALOG ]] && echo -e "${BLUE}####${NC} Creating ImageContentSourcePolicy..." && \
-kube_apply mirrors.yaml && sleep 10
+kube_apply images-mirror-set.yaml && sleep 10
+#kube_apply mirrors.yaml && sleep 10
 
 [[ -n $CATALOG ]] && echo -e "${BLUE}####${NC} Creating CatalogSource..." && \
 kube_apply catalog-source.yaml && \

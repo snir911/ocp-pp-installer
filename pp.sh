@@ -140,6 +140,9 @@ case $cld in
 	;;
 esac
 
+
+[[ -n $YES ]] || (read -r -p "Enable Feature Gates!!!")
+
 [[ -n $YES ]] || (read -r -p "Create KataConfig? [y/N] " && [[ "$REPLY" =~ ^[Yy]$ ]]) || exit 0
 
 # Create kataconfig

@@ -1,0 +1,16 @@
+# kbs-client.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kbs-client
+spec:
+  containers:
+  - name: kbs-client
+    image: quay.io/confidential-containers/kbs-client:v0.11.0
+    imagePullPolicy: IfNotPresent
+    command:
+      - sleep
+      - "360000"
+    env:
+      - name: RUST_LOG
+        value:  none

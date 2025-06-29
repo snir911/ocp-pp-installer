@@ -1,0 +1,10 @@
+# trustee-rvps-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rvps-reference-values
+  namespace: trustee-operator-system
+data:
+  reference-values.json: |
+    [
+    ]

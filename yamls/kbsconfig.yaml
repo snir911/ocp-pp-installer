@@ -1,0 +1,30 @@
+# kbsconfig.yaml
+apiVersion: confidentialcontainers.org/v1alpha1
+kind: KbsConfig
+metadata:
+  labels:
+    app.kubernetes.io/name: kbsconfig
+    app.kubernetes.io/instance: kbsconfig
+    app.kubernetes.io/part-of: trustee-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: trustee-operator
+  name: kbsconfig
+  namespace: trustee-operator-system
+spec:
+  kbsConfigMapName: kbs-config-cm
+  kbsAuthSecretName: kbs-auth-public-key
+  kbsDeploymentType: AllInOneDeployment
+  kbsRvpsRefValuesConfigMapName: rvps-reference-values
+  kbsSecretResources: ["kbsres1", "security-policy"]
+  kbsResourcePolicyConfigMapName: resource-policy
+  # Specify this attribute if you need to override the default attestation policy
+  # the attestation-policy config map has to be created first (see operator configuration)
+  #kbsAttestationPolicyConfigMapName: attestation-policy
+  # Specify this attribute if you need to change the serviceType (the default is ClusterIP)
+  # in this example the NodePort service is created
+  # If you are creating an in-cluster trustee, you must have NodePort
+  # in-cluster trustee is not supported in production
+  kbsServiceType: NodePort
+  # Specify this attribute for enabling DEBUG log in trustee pods
+  KbsEnvVars:
+    RUST_LOG: debug

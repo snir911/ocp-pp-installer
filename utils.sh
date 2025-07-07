@@ -135,3 +135,12 @@ remove_peerpods() {
 
     echo "!!! Delete cached bundle images in the Worker Nodes !!!"
 }
+
+remove_trustee() {
+    oc delete kbsconfig kbsconfig -n trustee-operator-system || true
+    oc delete subscription trustee-operator -n trustee-operator-system || true
+    oc delete operatorgroup trustee-operator-group -n trustee-operator-system || true
+    oc delete namespace trustee-operator-system || true
+    oc delete CatalogSource trustee-operator-catalog -n openshift-marketplace || true
+}
+

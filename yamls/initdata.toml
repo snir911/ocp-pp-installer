@@ -10,6 +10,7 @@ url = '${TRUSTEE_URL}'
 [token_configs.kbs]
 url = '${TRUSTEE_URL}'
 
+'''
 "cdh.toml"  = '''
 socket = 'unix:///run/confidential-containers/cdh.sock'
 credentials = []

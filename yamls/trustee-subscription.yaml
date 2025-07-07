@@ -7,5 +7,5 @@ spec:
   channel: stable
   installPlanApproval: Automatic
   name: trustee-operator
-  source: redhat-operators
+  source: ${SOURCE}
   sourceNamespace: openshift-marketplace

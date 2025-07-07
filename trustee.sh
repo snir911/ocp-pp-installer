@@ -3,12 +3,17 @@ set -e
 
 source utils.sh
 
-while getopts "dhy" OPTION; do
+while getopts "c:dhry" OPTION; do
     case $OPTION in
+    c)
+        export CATALOG=${OPTARG};;
     d)
         set -x;;
     h)
         helpmsg
+        exit 0;;
+    r)
+        remove_trustee
         exit 0;;
     y)
         YES=true;;
@@ -19,6 +24,19 @@ while getopts "dhy" OPTION; do
 done
 
 echo "Temp DIR: ${tmpdir}"
+if [[ -n $CATALOG ]]; then
+    export SOURCE=trustee-operator-catalog
+    echo -e "${RED}@@@ Using custom version @@@${NC}"
+    echo -e "${RED}@${NC}CATALOG=${BLUE}${CATALOG}${NC}"
+fi
+export SOURCE=${SOURCE:-redhat-operators}
+
+
+[[ -n $CATALOG ]] && echo -e "${BLUE}####${NC} Creating Mirrors Set..." && \
+kube_apply trustee-mirror-set.yaml
+
+[[ -n $CATALOG ]] && echo -e "${BLUE}####${NC} Creating CatalogSource..." && \
+kube_apply trustee-catalog-source.yaml
 
 echo -e "${BLUE}####${NC} Creating Namespace..."
 kube_apply trustee-namespace.yaml

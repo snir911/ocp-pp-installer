@@ -3,6 +3,7 @@ kind: Pod
 metadata:
   name: sleep
   annotations:
+    #io.katacontainers.config.hypervisor.default_gpus: "1"
     io.containerd.cri.runtime-handler: kata-remote
 spec:
   runtimeClassName: kata-remote
